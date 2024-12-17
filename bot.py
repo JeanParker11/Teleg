@@ -1,8 +1,6 @@
 import logging
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
-from modules.admin_commands import start, ban_user
-from modules.kick_commands import kick_all
-from modules.ban_commands import ban
+from modules import start, ban_user, kick_all, ban  # Importation centralisée via __init__.py
 from config import TOKEN
 
 # Configuration du logger
