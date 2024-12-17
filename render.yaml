@@ -1,0 +1,8 @@
+services:
+  - name: telegram-admin-bot
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "./start.sh"
+    envVars:
+      - key: TOKEN
+        value: "TON_TOKEN_TELEGRAM"  # Token à remplacer ou définir comme variable d'environnement
