@@ -1,12 +1,12 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 from config import TOKEN, SUDO_USERS
 
 # Configuration du logger
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
@@ -21,69 +21,65 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"Salut {user.first_name}!\nBienvenue dans le bot d'administration.\nChoisis une option :",
-        reply_markup=reply_markup,
+        reply_markup=reply_markup
     )
 
-# Fonction pour kicker tous les membres non-admins
+# Fonction pour kick tout le monde (admin only)
 async def kick_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     chat = update.effective_chat
     bot = context.bot
 
     # Vérifie si l'utilisateur est admin
-    user_status = await chat.get_member(query.from_user.id)
-    if user_status.status not in ["administrator", "creator"]:
-        await query.answer("❌ Tu n'es pas admin!")
+    admin_list = [admin.user.id for admin in await bot.get_chat_administrators(chat.id)]
+    if query.from_user.id not in admin_list:
+        await query.answer("Tu n'es pas admin!")
         return
 
-    await query.answer("🕒 Suppression de tous les membres non-admins...")
+    await query.answer("Suppression de tous les membres...")
 
-    # Récupère la liste des membres du groupe
-    try:
-        members = await chat.get_members()  # Remplacer par une méthode valide pour obtenir les membres
-        kicked_users = 0
-        for member in members:
-            # Ignore les administrateurs, le bot et les utilisateurs dans la liste SUDO_USERS
-            if member.user.id not in SUDO_USERS and member.user.id != bot.id and member.status not in ['administrator', 'creator']:
-                try:
-                    await chat.ban_member(member.user.id)
-                    kicked_users += 1
-                except Exception as e:
-                    logger.error(f"Erreur lors du kick de {member.user.id}: {e}")
+    # Kick tous les membres sauf admins
+    async for member in bot.get_chat_members(chat.id):
+        if member.user.id not in SUDO_USERS and member.user.id != bot.id and not member.status in ['administrator', 'creator']:
+            await bot.ban_chat_member(chat.id, member.user.id)
+    
+    await query.edit_message_text("Tous les membres non-admins ont été supprimés.")
 
-        await query.edit_message_text(f"✅ {kicked_users} membres non-admins ont été expulsés!")
-    except Exception as e:
-        await query.edit_message_text(f"Erreur lors du kick de tous les membres: {e}")
-
-# Commande pour bannir un utilisateur via réponse
-async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Fonction ban (admin only)
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
     chat = update.effective_chat
+    bot = context.bot
 
-    # Vérifie si l'utilisateur appelant est admin
-    user_status = await chat.get_member(update.effective_user.id)
-    if user_status.status not in ["administrator", "creator"]:
-        await update.message.reply_text("❌ Tu n'es pas admin!")
+    if query.from_user.id not in SUDO_USERS:
+        await query.answer("Tu n'as pas les permissions.")
         return
+    
+    await query.edit_message_text("Réponds au message de l'utilisateur que tu veux bannir avec /ban.")
 
-    if not update.message.reply_to_message:
-        await update.message.reply_text("⚠ Utilise cette commande en répondant à un message.")
+# Commande ban (via handle ou réponse)
+async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.get_member(update.effective_user.id).status not in ['administrator', 'creator']:
+        await update.message.reply_text("Tu n'es pas admin!")
         return
 
     user_to_ban = update.message.reply_to_message.from_user
-    await chat.ban_member(user_to_ban.id)
-    await update.message.reply_text(f"✅ {user_to_ban.first_name} a été banni!")
+    await context.bot.ban_chat_member(update.effective_chat.id, user_to_ban.id)
+    await update.message.reply_text(f"{user_to_ban.first_name} a été banni!")
 
 # Main
-def main():
+async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # Ajout des handlers
+    # Ajout des gestionnaires (handlers)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ban", ban))
     app.add_handler(CallbackQueryHandler(kick_all, pattern="kick_all"))
+    app.add_handler(CallbackQueryHandler(ban_user, pattern="ban_user"))
 
-    print("🚀 Bot démarré...")
-    app.run_polling()
+    logger.info("Bot démarré...")
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
