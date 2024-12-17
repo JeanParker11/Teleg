@@ -1,82 +1,59 @@
-import logging
-from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
-from config import TOKEN, SUDO_USERS
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackQueryHandler, CommandHandler
 
-# Configuration du logger
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-# Commande /start avec un menu principal
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    buttons = [
-        [InlineKeyboardButton("🚫 Kick All", callback_data="kick_all")],
-        [InlineKeyboardButton("🔨 Ban User", callback_data="ban_user")],
+# Fonction pour afficher le menu
+def menu(update: Update, context):
+    keyboard = [
+        [InlineKeyboardButton("🔨 Bannir", callback_data="ban_help"),
+         InlineKeyboardButton("⏳ Bannir Temporaire", callback_data="tban_help")],
+        [InlineKeyboardButton("🚪 Expulser", callback_data="kick_help"),
+         InlineKeyboardButton("🔓 Débannir", callback_data="unban_help")],
+        [InlineKeyboardButton("⚠ Mass Kick", callback_data="masskick_help")]
     ]
-    reply_markup = InlineKeyboardMarkup(buttons)
 
-    await update.message.reply_text(
-        f"Salut {user.first_name}!\nBienvenue dans le bot d'administration.\nChoisis une option :",
-        reply_markup=reply_markup
-    )
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text("Choisissez une action :", reply_markup=reply_markup)
 
-# Fonction pour kick tout le monde (admin only)
-async def kick_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+# Callback pour chaque action
+def button_handler(update: Update, context):
     query = update.callback_query
-    chat = update.effective_chat
-    bot = context.bot
+    query.answer()  # Répond au callback pour éviter "loading..."
 
-    # Vérifie si l'utilisateur est admin
-    admin_list = [admin.user.id for admin in await bot.get_chat_administrators(chat.id)]
-    if query.from_user.id not in admin_list:
-        await query.answer("Tu n'es pas admin!")
-        return
+    chat = query.message.chat
+    user = query.from_user
 
-    await query.answer("Suppression de tous les membres...")
+    if query.data == "ban_help":
+        query.edit_message_text("🔨 Utilisez /ban @nom_utilisateur pour bannir un membre.")
+    elif query.data == "tban_help":
+        query.edit_message_text("⏳ Utilisez /tban @nom_utilisateur [durée] pour bannir temporairement un membre.")
+    elif query.data == "kick_help":
+        query.edit_message_text("🚪 Utilisez /kick @nom_utilisateur pour expulser un membre.")
+    elif query.data == "unban_help":
+        query.edit_message_text("🔓 Utilisez /unban @nom_utilisateur pour débannir un membre.")
+    elif query.data == "masskick_help":
+        query.edit_message_text("⚠ Suppression de tous les membres non-admins...")
+        mass_kick(context.bot, chat)  # Appel à la fonction mass kick
 
-    # Kick tous les membres sauf admins
-    async for member in bot.get_chat_members(chat.id):
-        if member.user.id not in SUDO_USERS and member.user.id != bot.id and not member.status in ['administrator', 'creator']:
-            await bot.ban_chat_member(chat.id, member.user.id)
-    
-    await query.edit_message_text("Tous les membres non-admins ont été supprimés.")
 
-# Fonction ban (admin only)
-async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    chat = update.effective_chat
-    bot = context.bot
+# Fonction pour expulser tous les membres non-admins
+def mass_kick(bot, chat):
+    kicked_count = 0
+    for member in chat.get_administrators():
+        admins = [admin.user.id for admin in chat.get_administrators()]
+        
+    for member in bot.get_chat_members(chat.id):
+        if member.user.id not in admins and not member.user.is_bot:
+            try:
+                bot.kick_chat_member(chat.id, member.user.id)
+                kicked_count += 1
+            except Exception as e:
+                print(f"Erreur lors de la suppression de {member.user.id}: {e}")
+    bot.send_message(chat.id, f"✅ {kicked_count} membres non-admins ont été expulsés.")
 
-    if query.from_user.id not in SUDO_USERS:
-        await query.answer("Tu n'as pas les permissions.")
-        return
-    
-    await query.edit_message_text("Réponds au message de l'utilisateur que tu veux bannir avec /ban.")
+# Ajout des Handlers
+MENU_HANDLER = CommandHandler("menu", menu)
+BUTTON_HANDLER = CallbackQueryHandler(button_handler)
 
-# Commande ban (via handle ou réponse)
-async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.get_member(update.effective_user.id).status not in ['administrator', 'creator']:
-        await update.message.reply_text("Tu n'es pas admin!")
-        return
-
-    user_to_ban = update.message.reply_to_message.from_user
-    await context.bot.ban_chat_member(update.effective_chat.id, user_to_ban.id)
-    await update.message.reply_text(f"{user_to_ban.first_name} a été banni!")
-
-# Main
-def main():
-    app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("ban", ban))
-    app.add_handler(CallbackQueryHandler(kick_all, pattern="kick_all"))
-    app.add_handler(CallbackQueryHandler(ban_user, pattern="ban_user"))
-
-    print("Bot démarré...")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+dispatcher.add_handler(MENU_HANDLER)
+dispatcher.add_handler(BUTTON_HANDLER)
