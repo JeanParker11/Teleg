@@ -1,8 +1,6 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 from config import TOKEN, SUDO_USERS
 
 # Configuration du logger
@@ -26,10 +24,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup,
     )
 
-# Fonction pour kick tout le monde (admin only)
+# Fonction pour kicker tous les membres non-admins
 async def kick_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     chat = update.effective_chat
+    bot = context.bot
 
     # Vérifie si l'utilisateur est admin
     user_status = await chat.get_member(query.from_user.id)
@@ -37,21 +36,24 @@ async def kick_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("❌ Tu n'es pas admin!")
         return
 
-    await query.answer("🕒 Suppression des membres non-admins...")
+    await query.answer("🕒 Suppression de tous les membres non-admins...")
 
-    # Ici, la logique de kick est simulée (l'API ne permet pas de lister tous les membres facilement)
-    await query.edit_message_text(
-        "⚠ Suppression de tous les membres non-admins n'est pas autorisée directement via l'API Telegram."
-    )
+    # Récupère la liste des membres du groupe
+    try:
+        members = await chat.get_members()  # Remplacer par une méthode valide pour obtenir les membres
+        kicked_users = 0
+        for member in members:
+            # Ignore les administrateurs, le bot et les utilisateurs dans la liste SUDO_USERS
+            if member.user.id not in SUDO_USERS and member.user.id != bot.id and member.status not in ['administrator', 'creator']:
+                try:
+                    await chat.ban_member(member.user.id)
+                    kicked_users += 1
+                except Exception as e:
+                    logger.error(f"Erreur lors du kick de {member.user.id}: {e}")
 
-# Fonction pour afficher un message d'aide au bannissement
-async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-
-    await query.answer()
-    await query.edit_message_text(
-        "🔨 Pour bannir un utilisateur, utilise `/ban` en répondant au message de l'utilisateur."
-    )
+        await query.edit_message_text(f"✅ {kicked_users} membres non-admins ont été expulsés!")
+    except Exception as e:
+        await query.edit_message_text(f"Erreur lors du kick de tous les membres: {e}")
 
 # Commande pour bannir un utilisateur via réponse
 async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -79,7 +81,6 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ban", ban))
     app.add_handler(CallbackQueryHandler(kick_all, pattern="kick_all"))
-    app.add_handler(CallbackQueryHandler(ban_user, pattern="ban_user"))
 
     print("🚀 Bot démarré...")
     app.run_polling()
