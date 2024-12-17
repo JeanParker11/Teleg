@@ -1,57 +1,88 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    CallbackQueryHandler,
-    ContextTypes
+    ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 )
-import os
+from config import TOKEN, SUDO_USERS
 
-# Configuration du TOKEN
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Définissez votre TOKEN comme variable d'environnement
+# Configuration du logger
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
 
-# Fonction pour afficher le menu
-async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("🔨 Bannir", callback_data="ban_help"),
-         InlineKeyboardButton("⏳ Bannir Temporaire", callback_data="tban_help")],
-        [InlineKeyboardButton("🚪 Expulser", callback_data="kick_help"),
-         InlineKeyboardButton("🔓 Débannir", callback_data="unban_help")],
-        [InlineKeyboardButton("⚠ Mass Kick", callback_data="masskick_help")]
+# Commande /start avec un menu principal
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    buttons = [
+        [InlineKeyboardButton("🚫 Kick All", callback_data="kick_all")],
+        [InlineKeyboardButton("🔨 Ban User", callback_data="ban_user")],
     ]
+    reply_markup = InlineKeyboardMarkup(buttons)
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Choisissez une action :", reply_markup=reply_markup)
+    await update.message.reply_text(
+        f"Salut {user.first_name}!\nBienvenue dans le bot d'administration.\nChoisis une option :",
+        reply_markup=reply_markup,
+    )
 
-# Callback pour gérer les actions
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Fonction pour kick tout le monde (admin only)
+async def kick_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    chat = update.effective_chat
+
+    # Vérifie si l'utilisateur est admin
+    user_status = await chat.get_member(query.from_user.id)
+    if user_status.status not in ["administrator", "creator"]:
+        await query.answer("❌ Tu n'es pas admin!")
+        return
+
+    await query.answer("🕒 Suppression des membres non-admins...")
+
+    # Ici, la logique de kick est simulée (l'API ne permet pas de lister tous les membres facilement)
+    await query.edit_message_text(
+        "⚠ Suppression de tous les membres non-admins n'est pas autorisée directement via l'API Telegram."
+    )
+
+# Fonction pour afficher un message d'aide au bannissement
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+
     await query.answer()
+    await query.edit_message_text(
+        "🔨 Pour bannir un utilisateur, utilise `/ban` en répondant au message de l'utilisateur."
+    )
 
-    if query.data == "ban_help":
-        await query.edit_message_text("🔨 Utilisez /ban @nom_utilisateur pour bannir un membre.")
-    elif query.data == "tban_help":
-        await query.edit_message_text("⏳ Utilisez /tban @nom_utilisateur [durée] pour bannir temporairement un membre.")
-    elif query.data == "kick_help":
-        await query.edit_message_text("🚪 Utilisez /kick @nom_utilisateur pour expulser un membre.")
-    elif query.data == "unban_help":
-        await query.edit_message_text("🔓 Utilisez /unban @nom_utilisateur pour débannir un membre.")
-    elif query.data == "masskick_help":
-        await query.edit_message_text("⚠ Suppression de tous les membres non-admins en cours...")
-        # Ajoutez ici la logique pour expulser les membres si nécessaire
+# Commande pour bannir un utilisateur via réponse
+async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
 
-# Fonction principale pour démarrer le bot
+    # Vérifie si l'utilisateur appelant est admin
+    user_status = await chat.get_member(update.effective_user.id)
+    if user_status.status not in ["administrator", "creator"]:
+        await update.message.reply_text("❌ Tu n'es pas admin!")
+        return
+
+    if not update.message.reply_to_message:
+        await update.message.reply_text("⚠ Utilise cette commande en répondant à un message.")
+        return
+
+    user_to_ban = update.message.reply_to_message.from_user
+    await chat.ban_member(user_to_ban.id)
+    await update.message.reply_text(f"✅ {user_to_ban.first_name} a été banni!")
+
+# Main
 def main():
-    # Création de l'application
-    application = ApplicationBuilder().token(TOKEN).build()
+    app = ApplicationBuilder().token(TOKEN).build()
 
     # Ajout des handlers
-    application.add_handler(CommandHandler("menu", menu))
-    application.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("ban", ban))
+    app.add_handler(CallbackQueryHandler(kick_all, pattern="kick_all"))
+    app.add_handler(CallbackQueryHandler(ban_user, pattern="ban_user"))
 
-    # Lancer le bot
-    print("Bot démarré...")
-    application.run_polling()
+    print("🚀 Bot démarré...")
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
