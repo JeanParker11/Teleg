@@ -81,5 +81,7 @@ async def main():
     await app.run_polling()
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    # Exécute main() directement avec await sans utiliser asyncio.run()
+    from asyncio import get_event_loop
+    loop = get_event_loop()
+    loop.run_until_complete(main())
