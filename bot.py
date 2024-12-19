@@ -83,6 +83,32 @@ async def kick_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await query.edit_message_text(f"❌ Une erreur est survenue: {str(e)}")
 
+# Fonction pour bannir un utilisateur
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    chat = update.effective_chat
+
+    # Vérifie si l'utilisateur est admin
+    user_status = await chat.get_member(query.from_user.id)
+    if user_status.status not in ["administrator", "creator"]:
+        await query.answer("❌ Tu n'es pas admin!")
+        return
+
+    await query.answer("🔨 Bannissement de l'utilisateur en cours...")
+
+    # Vérifier si le message contient un utilisateur
+    if not update.message.reply_to_message:
+        await query.edit_message_text("⚠ Utilise cette commande en répondant à un message d'un utilisateur.")
+        return
+
+    user_to_ban = update.message.reply_to_message.from_user
+    try:
+        await chat.ban_member(user_to_ban.id)
+        await query.edit_message_text(f"✅ {user_to_ban.first_name} a été banni!")
+    except Exception as e:
+        logger.error(f"Erreur lors du bannissement : {str(e)}")
+        await query.edit_message_text(f"❌ Impossible de bannir {user_to_ban.first_name}.")
+
 # Fonction pour promouvoir un utilisateur comme administrateur
 async def promote_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
