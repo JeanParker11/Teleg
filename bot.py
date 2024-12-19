@@ -1,27 +1,25 @@
-import logging
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
-from modules import start, ban_user, kick_all, ban  # Importation centralisée via __init__.py
-from config import TOKEN
+import asyncio
+from telegram.ext import Application
 
-# Configuration du logger
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+# Votre configuration et setup ici
 
 async def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = Application.builder().token("YOUR_BOT_TOKEN").build()
 
-    # Ajout des gestionnaires de commandes et de callback
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("ban", ban))
-    app.add_handler(CallbackQueryHandler(kick_all, pattern="kick_all"))
-    app.add_handler(CallbackQueryHandler(ban_user, pattern="ban_user"))
+    # Ajoutez vos handlers ici
+    # Exemple : app.add_handler(CommandHandler("start", start))
 
-    logger.info("Bot démarré...")
+    print("Bot démarré...")
     await app.run_polling()
 
+# Vérification de la boucle d'événements existante
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    try:
+        asyncio.get_event_loop().run_until_complete(main())
+    except RuntimeError as e:
+        if "This event loop is already running" in str(e):
+            # Si une boucle est déjà active, exécuter directement sans `asyncio.run()`
+            loop = asyncio.get_event_loop()
+            loop.create_task(main())
+        else:
+            raise
