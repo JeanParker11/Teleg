@@ -39,15 +39,15 @@ async def kick_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.answer("🕒 Bannissement des membres non-admins...")
 
-    # Simuler le bannissement de tous les membres non-admins
+    # Récupérer la liste des administrateurs
     try:
-        # Obtenez la liste des membres du groupe (attention, l'API ne permet pas d'obtenir tous les membres d'un coup)
-        # Nous allons simuler en bannissant un membre à la fois. Il serait idéal de récupérer tous les membres d'une manière spécifique.
-        members = await chat.get_members(limit=100)  # Limite la récupération à 100 membres pour éviter de dépasser les quotas API
+        administrators = await chat.get_administrators()
 
-        for member in members:
-            # Bannir tous les membres non-admins
-            if member.user.status not in ["administrator", "creator"]:
+        # Bannir tous les membres non-admins
+        members = await chat.get_members_count()  # Récupérer le nombre de membres
+        for i in range(members):
+            member = await chat.get_member(i)
+            if member.status not in ["administrator", "creator"]:
                 try:
                     await chat.ban_member(member.user.id)
                     logger.info(f"Banni: {member.user.first_name} ({member.user.id})")
