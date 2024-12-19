@@ -6,7 +6,7 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
-    Filters,
+    filters,
     ContextTypes,
 )
 from config import TOKEN
@@ -120,7 +120,7 @@ def main():
     # Ajout des handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ban", ban))
-    app.add_handler(MessageHandler(Filters.text & ~Filters.command, track_active_members))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_active_members))
     app.add_handler(CallbackQueryHandler(kick_all, pattern="kick_all"))
     app.add_handler(CallbackQueryHandler(ban_user, pattern="ban_user"))
     app.add_handler(CallbackQueryHandler(list_members, pattern="list_members"))
