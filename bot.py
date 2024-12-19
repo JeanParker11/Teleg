@@ -1,9 +1,10 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+import random
+from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+    ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 )
-from config import TOKEN, SUDO_USERS
+from config import TOKEN
 
 # Configuration du logger
 logging.basicConfig(
@@ -12,78 +13,57 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Commande /start avec un menu principal
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Liste pour stocker les membres (cela sera mis à jour avec des événements)
+group_members = []
+
+# Fonction pour ajouter un membre à la liste
+async def add_member_to_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
     user = update.effective_user
-    buttons = [
-        [InlineKeyboardButton("🚫 Kick All", callback_data="kick_all")],
-        [InlineKeyboardButton("🔨 Ban User", callback_data="ban_user")],
-    ]
-    reply_markup = InlineKeyboardMarkup(buttons)
 
+    # Si ce n'est pas un message de commande ou un message de bot
+    if user.id not in [member.user.id for member in group_members]:
+        group_members.append(update.message)
+
+# Fonction pour taguer et bannir un utilisateur
+async def random_tag_and_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+
+    # Récupérer les administrateurs du groupe
+    administrators = await chat.get_administrators()
+
+    # Filtrer les membres non-administrateurs
+    non_admin_members = [member for member in group_members if member.user.id not in [admin.user.id for admin in administrators]]
+
+    if not non_admin_members:
+        await update.message.reply_text("⚠ Il n'y a plus de membres non-administrateurs à bannir.")
+        return
+
+    # Choisir un membre au hasard parmi les membres non-administrateurs
+    random_member = random.choice(non_admin_members)
+
+    # Bannir l'utilisateur
+    await chat.ban_member(random_member.user.id)
+    
+    # Mentionner le membre dans le message
+    await update.message.reply_text(f"🎉 @ {random_member.user.username}, tu es tagué(e) et banni(e) !")
+
+    # Simuler un processus continu : bannir un autre membre après un délai
+    if len(non_admin_members) > 1:
+        await random_tag_and_ban(update, context)
+
+# Fonction de démarrage
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        f"Salut {user.first_name}!\nBienvenue dans le bot d'administration.\nChoisis une option :",
-        reply_markup=reply_markup,
+        "Utilisez la commande /banall pour taguer et bannir un membre non-admin."
     )
 
-# Fonction pour kick tous les membres non-admins (simulation)
-async def kick_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    chat = update.effective_chat
+# Commande pour lancer le processus de ban
+async def ban_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔨 Début du processus de bannissement de tous les membres non-admins...")
 
-    # Vérifie si l'utilisateur est admin
-    user_status = await chat.get_member(query.from_user.id)
-    if user_status.status not in ["administrator", "creator"]:
-        await query.answer("❌ Tu n'es pas admin!")
-        return
-
-    await query.answer("🕒 Bannissement des membres non-admins...")
-
-    # Récupérer la liste des administrateurs
-    try:
-        administrators = await chat.get_administrators()
-
-        # Bannir tous les membres non-admins
-        members = await chat.get_members_count()  # Récupérer le nombre de membres
-        for i in range(members):
-            member = await chat.get_member(i)
-            if member.status not in ["administrator", "creator"]:
-                try:
-                    await chat.ban_member(member.user.id)
-                    logger.info(f"Banni: {member.user.first_name} ({member.user.id})")
-                except Exception as e:
-                    logger.error(f"Erreur en bannissant {member.user.first_name}: {str(e)}")
-
-        await query.edit_message_text("✅ Tous les membres non-admins ont été bannis.")
-    except Exception as e:
-        await query.edit_message_text(f"❌ Une erreur est survenue: {str(e)}")
-
-# Fonction pour afficher un message d'aide au bannissement
-async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-
-    await query.answer()
-    await query.edit_message_text(
-        "🔨 Pour bannir un utilisateur, utilise `/ban` en répondant au message de l'utilisateur."
-    )
-
-# Commande pour bannir un utilisateur via réponse
-async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat = update.effective_chat
-
-    # Vérifie si l'utilisateur appelant est admin
-    user_status = await chat.get_member(update.effective_user.id)
-    if user_status.status not in ["administrator", "creator"]:
-        await update.message.reply_text("❌ Tu n'es pas admin!")
-        return
-
-    if not update.message.reply_to_message:
-        await update.message.reply_text("⚠ Utilise cette commande en répondant à un message.")
-        return
-
-    user_to_ban = update.message.reply_to_message.from_user
-    await chat.ban_member(user_to_ban.id)
-    await update.message.reply_text(f"✅ {user_to_ban.first_name} a été banni!")
+    # Lancer la fonction pour bannir un membre
+    await random_tag_and_ban(update, context)
 
 # Main
 def main():
@@ -91,9 +71,8 @@ def main():
 
     # Ajout des handlers
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("ban", ban))
-    app.add_handler(CallbackQueryHandler(kick_all, pattern="kick_all"))
-    app.add_handler(CallbackQueryHandler(ban_user, pattern="ban_user"))
+    app.add_handler(CommandHandler("banall", ban_all))
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, add_member_to_list))
 
     logger.info("🚀 Bot démarré...")
     app.run_polling()
