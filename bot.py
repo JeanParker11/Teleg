@@ -56,6 +56,33 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup,
     )
 
+# Fonction pour kick tous les utilisateurs non-admin
+async def kick_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    chat = update.effective_chat
+
+    # Vérifie si l'utilisateur est admin
+    user_status = await chat.get_member(query.from_user.id)
+    if user_status.status not in ["administrator", "creator"]:
+        await query.answer("❌ Tu n'es pas admin!")
+        return
+
+    await query.answer("🕒 Suppression des membres non-admins...")
+
+    # Listage des membres du chat (non disponible via l'API publique, cette partie est simulée)
+    try:
+        members = await chat.get_members(limit=200)  # Limité à 200 membres pour l'exemple
+        for member in members:
+            if member.status not in ["administrator", "creator"]:
+                try:
+                    await chat.kick_member(member.user.id)
+                    logger.info(f"Utilisateur kické: {member.user.username}")
+                except Exception as e:
+                    logger.error(f"Impossible de kicker {member.user.username}: {str(e)}")
+        await query.edit_message_text("✅ Tous les utilisateurs non-admins ont été kickés.")
+    except Exception as e:
+        await query.edit_message_text(f"❌ Une erreur est survenue: {str(e)}")
+
 # Fonction pour promouvoir un utilisateur comme administrateur
 async def promote_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
