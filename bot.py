@@ -35,6 +35,12 @@ def save_member(user_id, username):
     with open(MEMBERS_FILE, "w") as file:
         json.dump(members, file)
 
+# Fonction pour enregistrer les membres actifs
+async def track_active_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    save_member(user.id, user.username or user.first_name)
+    logger.info(f"Membre actif détecté : {user.username or user.first_name} ({user.id})")
+
 # Commande /start avec un menu principal
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
